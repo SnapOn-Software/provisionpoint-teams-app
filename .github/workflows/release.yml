@@ -1,4 +1,4 @@
-name: Release Teams Apps
+name: Release Teams App Packages
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -30,16 +30,27 @@ jobs:
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          echo "package.json version: $PACKAGE_VERSION"
+          echo "Git tag version:      $TAG_VERSION"
+
           if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-            echo "Tag version $TAG_VERSION does not match package.json version $PACKAGE_VERSION"
+            echo "ERROR: package.json version does not match the Git tag."
             exit 1
           fi
 
+      - name: Validate configuration
+        run: npm run validate
+
       - name: Build Teams app packages
-        run: npm run build:all
+        run: npm run build
+
+      - name: List generated packages
+        run: ls -lah dist/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: dist/*.zip
+          files: |
+            dist/*.zip
