@@ -1,0 +1,62 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.7/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.7",
+  "version": "{{version}}",
+  "isFullScreen": true,
+  "id": "{{teamsAppId}}",
+  "packageName": "{{packageName}}",
+  "developer": {
+    "name": "ProvisionPoint",
+    "websiteUrl": "https://www.provisionpoint.com",
+    "privacyUrl": "https://www.provisionpoint.com/privacy-policy",
+    "termsOfUseUrl": "https://www.provisionpoint.com/terms-and-conditions",
+    "mpnId": "5188177"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "{{appName}}",
+    "full": "ProvisionPoint Governance and Lifecycle"
+  },
+  "description": {
+    "short": "The Provisioning, Governance & Lifecycle Management Solution for Microsoft 365",
+    "full": "ProvisionPoint is the Microsoft 365 provisioning, governance and lifecycle management tool designed for everyone. It works with the different apps in Microsoft 365 including SharePoint, Office 365 Groups, Microsoft Teams and more."
+  },
+  "accentColor": "#F58220",
+  "staticTabs": [
+    {
+      "entityId": "{{entityId}}",
+      "name": "Directory",
+      "contentUrl": "{{contentUrl}}",
+      "websiteUrl": "{{websiteUrl}}",
+      "scopes": [
+        "personal"
+      ]
+    }
+  ],
+  "bots": [
+    {
+      "botId": "{{botId}}",
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "www.provisionpoint.com"
+  ],
+  "webApplicationInfo": {
+    "id": "{{aadAppId}}",
+    "resource": "{{aadResource}}"
+  }
+}

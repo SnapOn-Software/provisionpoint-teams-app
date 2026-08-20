@@ -1,0 +1,9 @@
+{
+  "environment": "UK-UAT",
+  "teamsAppId": "5d9144bc-6ef5-4962-b360-9a09bdd24def",
+  "packageName": "com.provisionpoint.teams.ukuat",
+  "appName": "ProvisionPoint (UK UAT)",
+  "domain": "appuat.provisionpoint.com",
+  "aadAppId": "44608f53-1e54-4e64-b7ca-837e67f74d15",
+  "botId": null
+}

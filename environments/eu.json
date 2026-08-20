@@ -1,0 +1,9 @@
+{
+  "environment": "EU",
+  "teamsAppId": "2f1aa925-1258-4cde-bd2b-064cf44e39e8",
+  "packageName": "com.provisionpoint.teams.009",
+  "appName": "ProvisionPoint",
+  "domain": "009.eu-pp365.app",
+  "aadAppId": "45609b28-9849-43f0-8e68-d2ff51b672bc",
+  "botId": null
+}

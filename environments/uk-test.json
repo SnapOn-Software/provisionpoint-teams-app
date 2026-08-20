@@ -1,0 +1,10 @@
+{
+  "environment": "UK-Test",
+  "teamsAppId": "2fea32b1-859a-4b5a-b886-95fc5f7b1851",
+  "packageName": "com.provisionpoint.teams.uktest",
+  "appName": "ProvisionPoint (UK Test)",
+  "domain": "apptest.provisionpoint.com",
+  "aadAppId": "0706d0bf-6dd0-4e34-859e-a5c886c235dc",
+  "botId": "0706d0bf-6dd0-4e34-859e-a5c886c235dc",
+  "additionalDomains": []
+}

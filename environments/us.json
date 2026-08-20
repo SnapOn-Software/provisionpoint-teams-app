@@ -1,0 +1,9 @@
+{
+  "environment": "US",
+  "teamsAppId": "c0d2f926-e11d-486a-b020-9611819ad2d1",
+  "packageName": "com.provisionpoint.teams.006",
+  "appName": "ProvisionPoint",
+  "domain": "006.us-pp365.app",
+  "aadAppId": "c17a2732-5e88-405d-9969-066a47194a55",
+  "botId": null
+}
