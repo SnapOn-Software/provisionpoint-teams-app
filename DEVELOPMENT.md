@@ -12,7 +12,8 @@ The repository keeps the Teams app definition shared and stores only deployment-
 - `assets/` contains the shared Teams icons.
 - `scripts/TeamsAppBuilder.js` validates configuration, renders manifests, and creates the Teams ZIP packages.
 - `scripts/build.js` is the small command-line entry point.
-- `.github/workflows/release.yml` builds and publishes GitHub Releases from version tags.
+- `.github/workflows/validate.yml` validates and builds every pull request targeting `main`.
+- `.github/workflows/release.yml` publishes a release when an approved version bump is merged to `main`.
 
 The build intentionally relies on established packages rather than custom infrastructure code:
 
@@ -39,8 +40,9 @@ environments/                 Environment-specific configuration
 scripts/build.js              Build command entry point
 scripts/TeamsAppBuilder.js Build, validation and packaging logic
 src/manifest.template.json    Canonical Teams manifest template
-.github/workflows/release.yml GitHub release workflow
-package.json                  Build commands and release version
+.github/workflows/validate.yml Pull request validation workflow
+.github/workflows/release.yml  GitHub release workflow
+package.json                   Build commands and release version
 ```
 
 Generated ZIP files are written to `dist/`. The directory is intentionally excluded from Git because packages are rebuilt for each release.
@@ -169,60 +171,125 @@ It controls:
 
 - the version inside each generated Teams `manifest.json`
 - generated ZIP filenames
-- the npm version commit
 - the Git tag
 - the GitHub Release
 
-Do not maintain a separate release version elsewhere.
+Do not maintain a separate release version elsewhere, and do not create release tags manually.
+
+## Development workflow
+
+`main` is intended to be protected and changed only through pull requests. Normal development should use a short-lived branch created from the latest `main`:
+
+```bash
+git checkout main
+git pull
+git checkout -b feature/my-change
+```
+
+Make the change, commit it, push the branch, and open a pull request to `main`.
+
+Pull requests are validated by `.github/workflows/validate.yml`, which installs dependencies, validates every environment, and performs a complete package build.
+
+Normal feature or maintenance pull requests should **not** bump the package version unless the change is intentionally being released immediately. Keeping versioning separate lets multiple approved changes accumulate on `main` before a release is published.
 
 ## Creating a release
 
-Commit all application and configuration changes before creating a release. `npm version` requires a clean Git working tree.
+A release is initiated by merging a version bump through the same protected pull-request process as any other change. The branch name is not part of the release version and can follow the team's normal naming convention, for example `chore/version-bump`.
 
-### Patch release
-
-```bash
-npm run npm-v-patch
-```
-
-For example, `1.1.5` becomes `1.1.6`.
-
-### Minor release
+### 1. Start from the latest `main`
 
 ```bash
-npm run npm-v-minor
+git checkout main
+git pull
+git checkout -b chore/version-bump
 ```
 
-For example, `1.1.5` becomes `1.2.0`.
+### 2. Bump the package version
 
-### Major release
+For a patch release:
 
 ```bash
-npm run npm-v-major
+npm run version:patch
 ```
 
-For example, `1.2.0` becomes `2.0.0`.
+For a minor release:
 
-Each version command:
+```bash
+npm run version:minor
+```
 
-1. updates the version in `package.json` and `package-lock.json`
-2. creates the npm version commit
-3. creates the matching Git tag, such as `v1.1.6`
-4. pushes `main`
-5. pushes the tags
-6. triggers `.github/workflows/release.yml`
+For a major release:
 
-GitHub Actions then verifies the tag matches `package.json`, installs dependencies, validates configuration, builds every Teams package, creates the GitHub Release, and attaches every generated ZIP.
+```bash
+npm run version:major
+```
+
+These commands update only `package.json` and `package-lock.json`. They do **not** create a Git commit, create a tag, or push anything.
+
+Examples:
+
+```text
+Patch: 1.1.5 -> 1.1.6
+Minor: 1.1.5 -> 1.2.0
+Major: 1.2.0 -> 2.0.0
+```
+
+### 3. Commit and push the version bump
+
+```bash
+git add package.json package-lock.json
+git commit -m "Bump package version"
+git push -u origin chore/version-bump
+```
+
+Open a pull request from the version-bump branch to `main`. The pull request must pass the normal validation and review requirements.
+
+### 4. Merge the version bump pull request
+
+Once the PR is approved and merged, `main` contains the new version. That merge is the explicit signal that the current state of `main` is approved for release.
+
+No developer or maintainer needs to create or push a Git tag manually.
+
+### 5. GitHub publishes the release
+
+`.github/workflows/release.yml` runs when `package.json` changes on `main`. It:
+
+1. compares the previous and current `package.json` versions
+2. does nothing when `package.json` changed but the version did not
+3. fails if the requested version tag already exists
+4. installs dependencies
+5. validates all environment configuration
+6. builds every Teams app package
+7. creates the `vX.Y.Z` tag on the exact merged `main` commit
+8. creates the matching GitHub Release
+9. attaches every generated Teams ZIP
+
+The tag is therefore always created from an approved commit already on `main`. Release tags should be treated as immutable; if a published release is incorrect, fix the issue and publish a new version rather than moving or reusing the existing tag.
 
 ## GitHub release notes
 
-The workflow uses GitHub's built-in generated release notes:
+The release workflow uses GitHub's built-in generated release notes. Because development changes are merged through pull requests, GitHub can include the merged PRs since the previous release in the release description.
 
-```yaml
-generate_release_notes: true
+The workflow uses:
+
+```bash
+gh release create ... --generate-notes
 ```
 
-GitHub's useful generated notes are primarily based on merged pull requests. If a release contains only direct commits between tags, the Release page may show only the **Full Changelog** comparison link. That is expected GitHub behavior.
+## Repository protection
+
+For the intended enterprise workflow, protect `main` with a GitHub branch ruleset. Recommended settings are:
+
+- require a pull request before merging
+- require at least one approval
+- dismiss stale approvals when new commits are pushed
+- require conversation resolution before merging
+- require the **Validate and Build** status check
+- block force pushes
+- block branch deletion
+- restrict bypass permissions to organization administrators or an emergency-only group
+
+The release workflow does not modify `main`; it only tags the already-approved merge commit and publishes release assets.
 
 ## Maintenance guidelines
 
@@ -233,3 +300,5 @@ GitHub's useful generated notes are primarily based on merged pull requests. If 
 - Do not edit or commit generated files under `dist/`.
 - Add a new environment by adding its JSON file; avoid environment-specific build plumbing.
 - Prefer established libraries for generic concerns such as validation and ZIP creation rather than adding custom implementations.
+- Treat `package.json` as the release-version source of truth.
+- Do not manually create, move, or reuse release tags.
