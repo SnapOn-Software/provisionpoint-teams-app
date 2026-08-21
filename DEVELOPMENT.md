@@ -4,30 +4,46 @@ This document describes how the ProvisionPoint Teams application packages are co
 
 ## Architecture
 
-ProvisionPoint is deployed across multiple regions and environments. Rather than maintaining a separate complete Teams manifest for every deployment, the repository uses:
+The repository keeps the Teams app definition shared and stores only deployment-specific values per environment:
 
-- one shared Teams manifest template
-- one configuration file per environment
-- shared application icons
-- shared Bot Framework domain configuration
-- one build script for validation, rendering, and packaging
-- GitHub Actions for releases
+- `src/manifest.template.json` contains the canonical Teams manifest structure.
+- `environments/*.json` contains values that vary by deployment.
+- `config/bot-framework-domains.json` contains domains automatically required by bot-enabled apps.
+- `assets/` contains the shared Teams icons.
+- `scripts/TeamsAppBuilder.js` validates configuration, renders manifests, and creates the Teams ZIP packages.
+- `scripts/build.js` is the small command-line entry point.
+- `.github/workflows/release.yml` builds and publishes GitHub Releases from version tags.
 
-Environment configuration contains only values that vary between deployments. Shared Teams application structure stays in the manifest template.
+The build intentionally relies on established packages rather than custom infrastructure code:
+
+- **Zod** validates environment configuration.
+- **ADM-ZIP** creates the Teams application ZIP files.
+- Node's built-in argument parser handles the build command line.
+
+## Requirements
+
+Node.js **24 or newer** is required. GitHub Actions builds with Node.js 24, and `.nvmrc` pins local `nvm` usage to Node.js 24.
+
+Install dependencies from a clean checkout with:
+
+```bash
+npm ci
+```
 
 ## Repository structure
 
 ```text
 assets/                       Shared Teams app icons
-config/                       Shared build configuration
+config/                       Shared Bot Framework domain configuration
 environments/                 Environment-specific configuration
-scripts/build.js              Validation, rendering and packaging
+scripts/build.js              Build command entry point
+scripts/TeamsAppBuilder.js Build, validation and packaging logic
 src/manifest.template.json    Canonical Teams manifest template
 .github/workflows/release.yml GitHub release workflow
 package.json                  Build commands and release version
 ```
 
-Generated packages are written to `dist/`. The directory is intentionally excluded from Git because GitHub Actions rebuilds the packages for each release.
+Generated ZIP files are written to `dist/`. The directory is intentionally excluded from Git because packages are rebuilt for each release.
 
 ## Environments
 
@@ -39,9 +55,9 @@ Production environments currently include:
 - UK
 - US
 
-The repository can also contain non-production environments such as UK Test and UK UAT.
+The repository also contains non-production environments such as UK Test and UK UAT.
 
-Every `.json` file under `environments/` is automatically discovered by the full build. Adding another environment does not require a change to `build.js` or the GitHub Actions workflow.
+Every `.json` file under `environments/` is discovered automatically. Adding another environment does not require a change to the build code, `package.json`, or the GitHub Actions workflow.
 
 ## Environment configuration
 
@@ -55,22 +71,11 @@ A typical environment file looks like:
   "appName": "ProvisionPoint",
   "domain": "app.provisionpoint.com",
   "aadAppId": "...",
-  "botId": null,
-  "additionalDomains": []
+  "botId": null
 }
 ```
 
-Environment files should contain only values that genuinely vary between deployments.
-
-### Primary domain
-
-`domain` is the primary hostname for the environment. The build uses it to generate the environment URLs and automatically adds it to the final Teams `validDomains` array.
-
-Do not repeat the primary domain in `additionalDomains`.
-
-### Additional domains
-
-`additionalDomains` is an escape hatch for extra domains required only by a specific environment:
+If an environment needs extra Teams `validDomains`, add `additionalDomains`:
 
 ```json
 "additionalDomains": [
@@ -78,52 +83,29 @@ Do not repeat the primary domain in `additionalDomains`.
 ]
 ```
 
-Do not use it for:
+`additionalDomains` is optional and should contain only environment-specific exceptions.
 
-- the primary environment `domain`
-- global domains already present in the manifest template
-- Bot Framework domains
+### Primary domain
 
-Those are handled automatically.
+`domain` is the primary hostname for the environment. The build uses it to create the Teams tab URLs and SSO resource URI, and automatically adds it to the generated `validDomains` array.
 
-## Bot support
+Do not repeat the primary domain in `additionalDomains`.
 
-The canonical bot definition lives in `src/manifest.template.json`.
+### Bot support
 
-An environment only supplies its Bot ID:
+The complete bot definition lives in `src/manifest.template.json`. Environment configuration supplies only the Bot ID:
 
 ```json
 "botId": "0706d0bf-6dd0-4e34-859e-a5c886c235dc"
 ```
 
-When `botId` is null or omitted, the build removes the entire `bots` section from the generated manifest.
+If `botId` is null or omitted, the build removes the entire `bots` section. If it is present, the build replaces the template Bot ID and automatically includes the shared Bot Framework domains.
 
-When `botId` is present, the build:
+Bot Framework domains are maintained once in `config/bot-framework-domains.json` and should not be duplicated in environment files.
 
-1. keeps the bot definition from the template
-2. replaces the template Bot ID with the environment Bot ID
-3. adds the shared Bot Framework domains to `validDomains`
+### Generated `validDomains`
 
-This means enabling the bot in another environment normally requires only setting its `botId`.
-
-### Bot Framework domains
-
-Shared Bot Framework domains are maintained in `config/bot-framework-domains.json`:
-
-```json
-[
-  "token.botframework.com",
-  "europe.token.botframework.com",
-  "unitedstates.token.botframework.com",
-  "india.token.botframework.com"
-]
-```
-
-These domains are included only for environments that have a `botId`.
-
-### How `validDomains` is generated
-
-The final manifest combines:
+The final list combines:
 
 ```text
 Global domains from manifest.template.json
@@ -132,15 +114,7 @@ Global domains from manifest.template.json
 + Bot Framework domains when botId is configured
 ```
 
-## Install dependencies
-
-For a clean checkout:
-
-```bash
-npm ci
-```
-
-Use `npm install` only when intentionally updating dependency metadata or the lockfile.
+Duplicate domains are removed automatically.
 
 ## Build
 
@@ -150,48 +124,52 @@ Build every environment:
 npm run build
 ```
 
-Build a single environment using one of the convenience scripts:
+Build a single environment by passing the environment filename without `.json`:
 
 ```bash
-npm run build:uk
-npm run build:uk-test
+npm run build -- uk-test
 ```
 
-Or call the build script directly using the environment filename without `.json`:
-
-```bash
-node scripts/build.js uk-test
-```
+A build clears `dist/` and writes the requested ZIP package or packages there.
 
 ## Validate
 
-Validate all environment configuration without creating packages:
+Validate all environment configuration and generated manifests without creating ZIP files:
 
 ```bash
 npm run validate
 ```
 
+Validate a single environment:
+
+```bash
+npm run validate -- uk-test
+```
+
+Validation checks the environment schema, IDs, hostnames, release version, Bot Framework domain configuration, and unresolved template tokens.
+
 ## Adding a new environment
 
-1. Copy an existing file under `environments/`.
+1. Copy an existing JSON file under `environments/`.
 2. Rename it for the new environment, for example `ca.json`.
-3. Update its environment-specific values.
+3. Update the environment-specific values.
 4. Set `botId` if the environment uses the Teams bot.
 5. Add only genuine environment-specific exceptions to `additionalDomains`.
-6. Run `npm run validate`.
-7. Run `npm run build`.
+6. Run `npm run validate -- ca`.
+7. Run `npm run build -- ca`.
 8. Commit the new configuration.
 
-The next full build and GitHub release will discover the new environment automatically.
+The next full build and GitHub release will include it automatically.
 
 ## Versioning
 
 The `version` field in `package.json` is the **single source of truth** for a release.
 
-That version is used for:
+It controls:
 
-- the version inside each Teams `manifest.json`
+- the version inside each generated Teams `manifest.json`
 - generated ZIP filenames
+- the npm version commit
 - the Git tag
 - the GitHub Release
 
@@ -199,50 +177,25 @@ Do not maintain a separate release version elsewhere.
 
 ## Creating a release
 
-Commit all application/configuration changes before creating a release. `npm version` requires a clean working tree.
-
-For example:
-
-```bash
-git add .
-git commit -m "Update Teams app configuration"
-```
+Commit all application and configuration changes before creating a release. `npm version` requires a clean Git working tree.
 
 ### Patch release
-
-For a normal patch release:
 
 ```bash
 npm run npm-v-patch
 ```
 
-For example, `1.1.4` becomes `1.1.5`.
-
-The command:
-
-1. runs `npm version patch`
-2. updates `package.json` and `package-lock.json`
-3. creates the npm version commit
-4. creates the matching Git tag, such as `v1.1.5`
-5. pushes `main`
-6. pushes the tags
-7. triggers `.github/workflows/release.yml`
-
-GitHub Actions then verifies the tag matches `package.json`, validates the configuration, builds every package, creates the GitHub Release, generates simple GitHub release notes, and attaches every generated ZIP.
+For example, `1.1.5` becomes `1.1.6`.
 
 ### Minor release
 
-To move from a version such as `1.1.5` to `1.2.0`, run:
-
 ```bash
-npm version minor && git push origin main:main && git push --tags
+npm run npm-v-minor
 ```
 
-If minor releases become common, add an `npm-v-minor` convenience script to `package.json` matching the existing patch/major pattern.
+For example, `1.1.5` becomes `1.2.0`.
 
 ### Major release
-
-For a major version increase:
 
 ```bash
 npm run npm-v-major
@@ -250,38 +203,33 @@ npm run npm-v-major
 
 For example, `1.2.0` becomes `2.0.0`.
 
+Each version command:
+
+1. updates the version in `package.json` and `package-lock.json`
+2. creates the npm version commit
+3. creates the matching Git tag, such as `v1.1.6`
+4. pushes `main`
+5. pushes the tags
+6. triggers `.github/workflows/release.yml`
+
+GitHub Actions then verifies the tag matches `package.json`, installs dependencies, validates configuration, builds every Teams package, creates the GitHub Release, and attaches every generated ZIP.
+
 ## GitHub release notes
 
-Release notes are intentionally kept simple. The GitHub Actions workflow uses:
+The workflow uses GitHub's built-in generated release notes:
 
 ```yaml
 generate_release_notes: true
 ```
 
-GitHub generates the release notes automatically from changes since the previous release. No manually maintained changelog is required for the normal release process.
+GitHub's useful generated notes are primarily based on merged pull requests. If a release contains only direct commits between tags, the Release page may show only the **Full Changelog** comparison link. That is expected GitHub behavior.
 
-Release titles, commit messages, and pull request titles should therefore be clear enough to produce useful release history.
+## Maintenance guidelines
 
-## Package contents
-
-Each generated Teams package contains exactly:
-
-```text
-manifest.json
-color.png
-outline.png
-```
-
-These files are placed at the root of the ZIP package.
-
-## Maintenance rules
-
-- Keep shared Teams application structure in `src/manifest.template.json`.
-- Keep environment files limited to values that actually vary.
+- Keep shared Teams structure in `src/manifest.template.json`.
+- Keep environment JSON limited to values that actually vary.
 - Do not duplicate the primary domain in `additionalDomains`.
-- Do not put Bot Framework domains in environment configuration.
-- Do not manually edit files generated under `dist/`.
-- Do not commit `dist/`.
-- Keep `package.json` as the single source of truth for release versions.
-- Commit functional changes before running an npm version command.
-- Use GitHub Releases as the source for deployable Teams ZIP packages.
+- Do not put Bot Framework domains in environment files.
+- Do not edit or commit generated files under `dist/`.
+- Add a new environment by adding its JSON file; avoid environment-specific build plumbing.
+- Prefer established libraries for generic concerns such as validation and ZIP creation rather than adding custom implementations.
